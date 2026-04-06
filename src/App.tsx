@@ -52,10 +52,10 @@ export default function App() {
                 Match Rate
               </div>
               <div className="text-7xl md:text-8xl font-bold tracking-tighter text-white tabular-nums">
-                <RollingCounter value={results.totalProbability * 100} decimals={2} suffix="%" />
+                <RollingCounter value={results.matchRate * 100} decimals={2} suffix="%" />
               </div>
               
-              <MatchRateSlider probability={results.totalProbability} />
+              <MatchRateSlider probability={results.matchRate} />
             </div>
 
             <SummarySection 

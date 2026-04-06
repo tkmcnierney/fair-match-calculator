@@ -184,22 +184,13 @@ export function calculateMatches(filters: {
     wantsChildren: filters.wantsChildren
   });
   
-  let totalProbability = ageFilterProbability * pHeight * pIncome * pRace * pLifestyle;
-
-  // Secure Attachment Type reduction (30% of pool is secure)
-  if (filters.secureAttachment) {
-    // Secure Affinity: If user is also secure, they have higher compatibility with the secure pool (0.5x vs 0.3x)
-    const secureMultiplier = filters.userSecureAttachment ? 0.5 : 0.3;
-    totalProbability *= secureMultiplier;
-  }
+  // The "Match Rate" is the probability within the selected pool (excluding the age filter itself)
+  let matchRate = pHeight * pIncome * pRace * pLifestyle;
 
   // Assortative Mating Multiplier:
   // If user is top 75th percentile and meets their own income requirement, apply 1.3x bonus
   const userIsHighEarner = filters.userIncome >= city.income.p75;
   const userMeetsOwnIncomeRequirement = filters.userIncome >= filters.minIncome;
-  if (userIsHighEarner && userMeetsOwnIncomeRequirement) {
-    totalProbability *= 1.3;
-  }
 
   // Global Affinity Multiplier (Phenotypic Assortative Mating):
   // If user selects 3 or more of their own lifestyle toggles, apply 1.6x multiplier.
@@ -210,9 +201,6 @@ export function calculateMatches(filters: {
     filters.userSecureAttachment
   ];
   const activeUserToggles = userToggles.filter(Boolean).length;
-  if (activeUserToggles >= 3) {
-    totalProbability *= 1.6;
-  }
 
   // Correlation Factor (Clustering Multiplier):
   // Offsets the "Independence Trap" where we assume traits like high income and fitness are independent.
@@ -226,30 +214,52 @@ export function calculateMatches(filters: {
     filters.secureAttachment
   ];
   const activeRestrictiveFilters = restrictiveFilters.filter(Boolean).length;
+
+  // Apply multipliers to the match rate
+  // Secure Attachment Type reduction (30% of pool is secure)
+  if (filters.secureAttachment) {
+    const secureMultiplier = filters.userSecureAttachment ? 0.5 : 0.3;
+    matchRate *= secureMultiplier;
+  }
+
+  // Assortative Mating Multiplier
+  if (userIsHighEarner && userMeetsOwnIncomeRequirement) {
+    matchRate *= 1.3;
+  }
+
+  // Global Affinity Multiplier
+  if (activeUserToggles >= 3) {
+    matchRate *= 1.6;
+  }
+
+  // Correlation Factor
   if (activeRestrictiveFilters >= 3) {
-    totalProbability *= 1.15;
+    matchRate *= 1.15;
   }
 
-  // Dating Up Penalty (Friction Penalty):
-  // Assortative mating suggests matching is harder when looking for someone in a significantly 
-  // higher socioeconomic bracket than yourself.
+  // Dating Up Penalty
   if (filters.minIncome > filters.userIncome * 2 && filters.minIncome > 0) {
-    totalProbability *= 0.75;
+    matchRate *= 0.75;
   }
 
-  // Cap probability at 1.0
-  totalProbability = Math.min(1.0, totalProbability);
+  // Cap match rate at 1.0
+  matchRate = Math.min(1.0, matchRate);
 
-  const remainingMatches = Math.max(0, Math.round(actualDenominator * totalProbability));
+  // Remaining matches is the actual pool size multiplied by the match rate
+  // If age range is narrower than baseline, we still use the actual density/single rate
+  const selectedPool = genderPool * selectedDensity * selectedSingleRate;
+  const remainingMatches = Math.max(0, Math.round(selectedPool * matchRate));
   
+  // Fairness Probability is relative to the baseline pool
   const fairnessProbability = Math.min(1.0, remainingMatches / baselineDenominator);
   
   return {
     remainingMatches,
-    denominatorPool: actualDenominator,
+    denominatorPool: selectedPool,
     baselineDenominator,
     baselineRange: baseline,
     totalProbability: fairnessProbability,
+    matchRate,
     breakdown: {
       age: ageFilterProbability,
       height: pHeight,
