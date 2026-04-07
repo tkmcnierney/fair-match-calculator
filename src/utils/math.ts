@@ -68,25 +68,51 @@ export function getIncomeProbability(cityId: CityId, minIncome: number, avgAge: 
   return 1 - pLess;
 }
 
-export function getHeightProbability(gender: Gender, minHeight: number): number {
+export function getHeightProbability(cityId: CityId, gender: Gender, minHeight: number): number {
   const dist = HEIGHT_DIST[gender];
-  const pLess = normalCDF(minHeight, dist.mean, dist.sd);
+  const city = CITIES[cityId];
+  const adjustedMean = dist.mean + city.heightOffset;
+  const pLess = normalCDF(minHeight, adjustedMean, dist.sd);
   return 1 - pLess;
 }
 
-export function getRaceProbability(cityId: CityId, selectedRaces: Race[]): number {
+export function getRaceProbability(cityId: CityId, selectedRaces: Race[], userRace?: Race): number {
   if (selectedRaces.length === 0) return 1;
   const city = CITIES[cityId];
-  return selectedRaces.reduce((sum, race) => sum + city.raceDist[race], 0);
+  
+  const totalProb = selectedRaces.reduce((sum, race) => {
+    let prob = city.raceDist[race];
+    // Apply a subtle "Social Density" nudge (1.15x) if the user is looking for their own race.
+    // This reflects higher mutual affinity and shared social circles without a massive "jump".
+    if (race === userRace) {
+      prob *= 1.15;
+    }
+    return sum + prob;
+  }, 0);
+
+  return Math.min(1.0, totalProb);
 }
 
 export function getLifestyleProbability(cityId: CityId, gender: Gender, toggles: { excludeObese: boolean; nonSmoker: boolean; wantsChildren: boolean }): number {
   let p = 1;
-  if (toggles.excludeObese) p *= (1 - CITIES[cityId].obesityRate);
+  const city = CITIES[cityId];
+  if (toggles.excludeObese) p *= (1 - city.obesityRate);
   
   const rates = LIFESTYLE_RATES[gender];
-  if (toggles.nonSmoker) p *= rates.nonSmoker;
-  if (toggles.wantsChildren) p *= rates.wantsChildren;
+  if (toggles.nonSmoker) {
+    // Use city-specific smoking rate, adjusted by gender-specific ratios
+    const avgNonSmoker = (LIFESTYLE_RATES.male.nonSmoker + LIFESTYLE_RATES.female.nonSmoker) / 2;
+    const genderRatio = rates.nonSmoker / avgNonSmoker;
+    const cityNonSmokerRate = Math.min(1.0, (1 - city.smokingRate) * genderRatio);
+    p *= cityNonSmokerRate;
+  }
+  if (toggles.wantsChildren) {
+    // Use city-specific children rate, adjusted by gender-specific ratios
+    const avgWantsChildren = (LIFESTYLE_RATES.male.wantsChildren + LIFESTYLE_RATES.female.wantsChildren) / 2;
+    const genderRatio = rates.wantsChildren / avgWantsChildren;
+    const cityWantsChildrenRate = Math.min(1.0, city.childrenRate * genderRatio);
+    p *= cityWantsChildrenRate;
+  }
   return p;
 }
 
@@ -135,6 +161,7 @@ export function calculateMatches(filters: {
   userNonSmoker: boolean;
   userWantsChildren: boolean;
   userSecureAttachment: boolean;
+  userRace: Race;
   gender: Gender;
   minAge: number;
   maxAge: number;
@@ -153,12 +180,12 @@ export function calculateMatches(filters: {
   const baseline = getHealthyAgeRange(filters.userAge);
   const baselineDensity = getAgeDensity(baseline.min, baseline.max);
   const baselineAvgAge = (baseline.min + baseline.max) / 2;
-  const baselineSingleRate = getSingleRate(baselineAvgAge);
+  const baselineSingleRate = getSingleRate(baselineAvgAge) * city.singleRateMultiplier;
   const baselineDenominator = genderPool * baselineDensity * baselineSingleRate;
   
   const selectedDensity = getAgeDensity(filters.minAge, filters.maxAge);
   const avgAge = (filters.minAge + filters.maxAge) / 2;
-  const selectedSingleRate = getSingleRate(avgAge);
+  const selectedSingleRate = getSingleRate(avgAge) * city.singleRateMultiplier;
   
   const selectedRange = filters.maxAge - filters.minAge;
   const baselineRange = baseline.max - baseline.min;
@@ -175,25 +202,24 @@ export function calculateMatches(filters: {
     ageFilterProbability = (selectedDensity * selectedSingleRate) / (baselineDensity * baselineSingleRate);
   }
   
-  const pHeight = getHeightProbability(filters.gender, filters.minHeight);
-  const pIncome = getIncomeProbability(filters.city, filters.minIncome, avgAge);
-  const pRace = getRaceProbability(filters.city, filters.selectedRaces);
-  const pLifestyle = getLifestyleProbability(filters.city, filters.gender, {
+  let pHeight = getHeightProbability(filters.city, filters.gender, filters.minHeight);
+  
+  let pIncome = getIncomeProbability(filters.city, filters.minIncome, avgAge);
+  // Local Nudge: Income Reciprocity
+  const userIsHighEarner = filters.userIncome >= city.income.p75;
+  if (userIsHighEarner && filters.minIncome >= city.income.p50) {
+    pIncome = Math.min(1.0, pIncome * 1.2);
+  }
+
+  const pRace = getRaceProbability(filters.city, filters.selectedRaces, filters.userRace);
+  
+  let pLifestyle = getLifestyleProbability(filters.city, filters.gender, {
     excludeObese: filters.excludeObese,
     nonSmoker: filters.nonSmoker,
     wantsChildren: filters.wantsChildren
   });
-  
-  // The "Match Rate" is the probability within the selected pool (excluding the age filter itself)
-  let matchRate = pHeight * pIncome * pRace * pLifestyle;
 
-  // Assortative Mating Multiplier:
-  // If user is top 75th percentile and meets their own income requirement, apply 1.3x bonus
-  const userIsHighEarner = filters.userIncome >= city.income.p75;
-  const userMeetsOwnIncomeRequirement = filters.userIncome >= filters.minIncome;
-
-  // Global Affinity Multiplier (Phenotypic Assortative Mating):
-  // If user selects 3 or more of their own lifestyle toggles, apply 1.6x multiplier.
+  // Local Nudge: Lifestyle Reciprocity
   const userToggles = [
     filters.userNotObese,
     filters.userNonSmoker,
@@ -201,10 +227,26 @@ export function calculateMatches(filters: {
     filters.userSecureAttachment
   ];
   const activeUserToggles = userToggles.filter(Boolean).length;
+  
+  const seekingToggles = [
+    filters.excludeObese,
+    filters.nonSmoker,
+    filters.wantsChildren,
+    filters.secureAttachment
+  ];
+  const activeSeekingToggles = seekingToggles.filter(Boolean).length;
 
-  // Correlation Factor (Clustering Multiplier):
-  // Offsets the "Independence Trap" where we assume traits like high income and fitness are independent.
-  // In reality, these traits cluster. If 3+ restrictive filters are active, apply 1.15x boost.
+  if (activeUserToggles >= 3 && activeSeekingToggles >= 2) {
+    pLifestyle = Math.min(1.0, pLifestyle * 1.3);
+  } else if (activeUserToggles >= 3) {
+    pLifestyle = Math.min(1.0, pLifestyle * 1.15);
+  }
+  
+  // The "Match Rate" is the product of these locally-nudged probabilities
+  let matchRate = pHeight * pIncome * pRace * pLifestyle;
+
+  // 1. Correlation Factor (Clustering Correction)
+  // A global multiplier to account for the fact that desirable traits are not independent.
   const restrictiveFilters = [
     filters.minIncome > city.income.p50,
     filters.minHeight > HEIGHT_DIST[filters.gender].mean,
@@ -214,35 +256,22 @@ export function calculateMatches(filters: {
     filters.secureAttachment
   ];
   const activeRestrictiveFilters = restrictiveFilters.filter(Boolean).length;
+  if (activeRestrictiveFilters >= 3) {
+    matchRate *= 1.15; 
+  }
 
-  // Apply multipliers to the match rate
-  // Secure Attachment Type reduction (30% of pool is secure)
+  // 2. Secure Attachment Filter (Pool Reduction)
   if (filters.secureAttachment) {
-    const secureMultiplier = filters.userSecureAttachment ? 0.5 : 0.3;
+    const secureMultiplier = filters.userSecureAttachment ? 0.6 : 0.3;
     matchRate *= secureMultiplier;
   }
 
-  // Assortative Mating Multiplier
-  if (userIsHighEarner && userMeetsOwnIncomeRequirement) {
-    matchRate *= 1.3;
-  }
-
-  // Global Affinity Multiplier
-  if (activeUserToggles >= 3) {
-    matchRate *= 1.6;
-  }
-
-  // Correlation Factor
-  if (activeRestrictiveFilters >= 3) {
-    matchRate *= 1.15;
-  }
-
-  // Dating Up Penalty
+  // 3. Dating Up Penalty
   if (filters.minIncome > filters.userIncome * 2 && filters.minIncome > 0) {
-    matchRate *= 0.75;
+    matchRate *= 0.7;
   }
 
-  // Cap match rate at 1.0
+  // Final Cap at 1.0
   matchRate = Math.min(1.0, matchRate);
 
   // Remaining matches is the actual pool size multiplied by the match rate
@@ -253,6 +282,21 @@ export function calculateMatches(filters: {
   // Fairness Probability is relative to the baseline pool
   const fairnessProbability = Math.min(1.0, remainingMatches / baselineDenominator);
   
+  // Bottleneck detection
+  const probabilities = [
+    { name: 'Age Range', value: ageFilterProbability },
+    { name: 'Height', value: pHeight },
+    { name: 'Income', value: pIncome },
+    { name: 'Race/Ethnicity', value: pRace },
+    { name: 'Lifestyle/Health', value: pLifestyle },
+  ];
+  
+  if (filters.secureAttachment) {
+    probabilities.push({ name: 'Secure Attachment', value: filters.userSecureAttachment ? 0.6 : 0.3 });
+  }
+
+  const bottleneck = probabilities.sort((a, b) => a.value - b.value)[0];
+
   return {
     remainingMatches,
     denominatorPool: selectedPool,
@@ -260,6 +304,7 @@ export function calculateMatches(filters: {
     baselineRange: baseline,
     totalProbability: fairnessProbability,
     matchRate,
+    bottleneck: matchRate < 0.05 ? bottleneck.name : null,
     breakdown: {
       age: ageFilterProbability,
       height: pHeight,

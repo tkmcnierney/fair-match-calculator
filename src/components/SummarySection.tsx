@@ -7,9 +7,10 @@ interface Props {
   remainingMatches: number;
   actualDenominator: number;
   baselineDenominator: number;
+  bottleneck: string | null;
 }
 
-export function SummarySection({ probability, remainingMatches, actualDenominator, baselineDenominator }: Props) {
+export function SummarySection({ probability, remainingMatches, actualDenominator, baselineDenominator, bottleneck }: Props) {
   const [showFairnessTooltip, setShowFairnessTooltip] = useState(false);
 
   // Fairness Score: 
@@ -20,11 +21,32 @@ export function SummarySection({ probability, remainingMatches, actualDenominato
 
   return (
     <div className="space-y-8 py-12">
+      {/* Bottleneck Alert */}
+      <AnimatePresence>
+        {bottleneck && (
+          <motion.div 
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: 'auto' }}
+            exit={{ opacity: 0, height: 0 }}
+            className="p-4 bg-blue-500/10 border border-blue-500/20 rounded-2xl flex items-start gap-3"
+          >
+            <Info className="text-blue-500 shrink-0 mt-0.5" size={16} />
+            <div className="text-xs text-blue-200/80 leading-relaxed">
+              <span className="font-bold text-blue-400">Bottleneck Detected:</span> Your <span className="text-white font-medium">{bottleneck}</span> filter is the primary factor reducing your match rate. Widening this would significantly increase your pool.
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         <div className="p-8 bg-zinc-900/50 border border-white/5 rounded-3xl text-center">
           <div className="text-[10px] uppercase tracking-widest text-white/40 font-mono mb-2">Remaining Matches</div>
-          <div className="text-4xl font-bold text-white mb-1">{remainingMatches.toLocaleString()}</div>
-          <div className="text-xs text-white/40">in your local pool</div>
+          <div className="text-4xl font-bold text-white mb-1">
+            {remainingMatches === 0 ? "0" : remainingMatches.toLocaleString()}
+          </div>
+          <div className="text-xs text-white/40">
+            {remainingMatches === 0 ? "No matches found in your local pool" : "in your local pool"}
+          </div>
         </div>
         
         <div className="p-8 bg-zinc-900/50 border border-white/5 rounded-3xl text-center relative">
@@ -50,7 +72,7 @@ export function SummarySection({ probability, remainingMatches, actualDenominato
                 className="absolute bottom-full left-1/2 -translate-x-1/2 mb-4 w-64 p-4 bg-zinc-900 border border-white/10 rounded-xl shadow-2xl z-50 text-xs leading-relaxed text-white/80 text-left"
               >
                 <p className="font-bold text-white mb-1">About the Fairness Score:</p>
-                This is a relative measure of how "open" your filters are compared to the local average. 
+                This is a relative measure of how "open" your filters are compared to the local population average. 
                 A score of 100 means your criteria are as inclusive as (or more than) the typical baseline for your city, 
                 even if the absolute number of matches is low due to city size or specific non-negotiables.
               </motion.div>

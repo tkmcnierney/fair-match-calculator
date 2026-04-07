@@ -18,6 +18,8 @@ export function FilterSection({ filters, onChange }: Props) {
     onChange({ ...filters, [key]: value });
   };
 
+  const city = CITIES[filters.city];
+
   const formatHeight = (inches: number) => {
     const ft = Math.floor(inches / 12);
     const in_ = inches % 12;
@@ -25,16 +27,25 @@ export function FilterSection({ filters, onChange }: Props) {
   };
 
   const formatIncome = (val: number) => {
-    if (val >= 1000000) return `$${(val / 1000000).toFixed(1)}M+`;
-    if (val >= 1000) return `$${(val / 1000).toFixed(0)}k+`;
-    return `$${val}`;
+    const symbol = city.currency.symbol;
+    const code = city.currency.code;
+    if (val >= 1000000) return `${symbol}${(val / 1000000).toFixed(1)}M+ (${code})`;
+    if (val >= 1000) return `${symbol}${(val / 1000).toFixed(0)}k+ (${code})`;
+    return `${symbol}${val} (${code})`;
   };
+
+  const sortedCities = Object.entries(CITIES).sort((a, b) => b[1].adultPopulation - a[1].adultPopulation);
 
   return (
     <div className="space-y-12">
       {/* Your Info Section */}
       <div className="space-y-8 p-6 bg-zinc-900/50 border border-white/5 rounded-3xl backdrop-blur-xl">
-        <h3 className="text-[10px] uppercase tracking-[0.2em] text-blue-500 font-mono font-bold">Your Information</h3>
+        <div className="space-y-2">
+          <h3 className="text-[10px] uppercase tracking-[0.2em] text-blue-500 font-mono font-bold">Your Information</h3>
+          <p className="text-xs text-white/40 leading-relaxed">
+            Your personal details apply <b>Local Nudges</b> to the specific pools you are searching in. For example, being a high-earner increases your Match Rate within the local high-earner pool, rewarding you for meeting your own standards without inflating the global index.
+          </p>
+        </div>
         
         <div className="grid grid-cols-2 gap-4">
           <div className="space-y-2">
@@ -44,8 +55,8 @@ export function FilterSection({ filters, onChange }: Props) {
               onChange={(e) => update('city', e.target.value as CityId)}
               className="w-full bg-zinc-800 border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-blue-500/50 appearance-none"
             >
-              {Object.entries(CITIES).map(([id, data]) => (
-                <option key={id} value={id}>{(data as any).name}</option>
+              {sortedCities.map(([id, data]) => (
+                <option key={id} value={id}>{data.name}</option>
               ))}
             </select>
           </div>
@@ -59,6 +70,41 @@ export function FilterSection({ filters, onChange }: Props) {
               <option value="female">Women</option>
               <option value="male">Men</option>
             </select>
+          </div>
+        </div>
+
+        {/* User Race */}
+        <div className="space-y-3">
+          <div className="space-y-1">
+            <label className="text-[10px] uppercase tracking-widest text-white/40 font-mono">Your Race / Ethnicity</label>
+            <p className="text-[10px] text-white/20 leading-tight">
+              Used only to calculate cultural affinity nudges. You can keep it 'Not Specified'.
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <button
+              onClick={() => update('userRace', undefined)}
+              className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
+                filters.userRace === undefined
+                  ? 'bg-blue-500 text-white'
+                  : 'bg-zinc-800 text-white/40 hover:bg-zinc-700'
+              }`}
+            >
+              Not Specified
+            </button>
+            {(['white', 'black', 'hispanic', 'asian', 'other'] as Race[]).map(race => (
+              <button
+                key={race}
+                onClick={() => update('userRace', race)}
+                className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
+                  filters.userRace === race
+                    ? 'bg-blue-500 text-white'
+                    : 'bg-zinc-800 text-white/40 hover:bg-zinc-700'
+                }`}
+              >
+                {race.charAt(0).toUpperCase() + race.slice(1)}
+              </button>
+            ))}
           </div>
         </div>
 
@@ -83,7 +129,7 @@ export function FilterSection({ filters, onChange }: Props) {
             <span className="text-xl font-medium text-white">{formatIncome(filters.userIncome)}</span>
           </div>
           <input 
-            type="range" min="0" max="1000000" step="5000"
+            type="range" min="0" max={city.incomeMax} step="5000"
             value={filters.userIncome}
             onChange={(e) => update('userIncome', parseInt(e.target.value))}
             className="w-full h-1.5 bg-zinc-800 rounded-lg appearance-none cursor-pointer accent-blue-500"
@@ -157,12 +203,22 @@ export function FilterSection({ filters, onChange }: Props) {
 
       {/* Preferences Section */}
       <div className="space-y-8 p-6 bg-zinc-900/50 border border-white/5 rounded-3xl backdrop-blur-xl">
-        <h3 className="text-[10px] uppercase tracking-[0.2em] text-blue-500 font-mono font-bold">Your Preferences</h3>
+        <div className="space-y-2">
+          <h3 className="text-[10px] uppercase tracking-[0.2em] text-blue-500 font-mono font-bold">Your Preferences</h3>
+          <p className="text-xs text-white/40 leading-relaxed">
+            Set your non-negotiables. These filters directly reduce the pool of potential matches based on the local population density and demographic distributions for your chosen city.
+          </p>
+        </div>
 
         {/* Age Range */}
         <div className="space-y-4">
           <div className="flex justify-between items-end">
-            <label className="text-[10px] uppercase tracking-widest text-white/40 font-mono">Age Range</label>
+            <div className="space-y-1">
+              <label className="text-[10px] uppercase tracking-widest text-white/40 font-mono">Age Range</label>
+              <p className="text-[10px] text-white/20 leading-tight max-w-[200px]">
+                Narrower ranges reduce the pool size.
+              </p>
+            </div>
             <span className="text-xl font-medium text-white">{filters.minAge} - {filters.maxAge}</span>
           </div>
           <div className="flex gap-4">
@@ -184,7 +240,12 @@ export function FilterSection({ filters, onChange }: Props) {
         {/* Height */}
         <div className="space-y-4">
           <div className="flex justify-between items-end">
-            <label className="text-[10px] uppercase tracking-widest text-white/40 font-mono">Min Height</label>
+            <div className="space-y-1">
+              <label className="text-[10px] uppercase tracking-widest text-white/40 font-mono">Min Height</label>
+              <p className="text-[10px] text-white/20 leading-tight max-w-[200px]">
+                Height follows a normal distribution.
+              </p>
+            </div>
             <span className="text-xl font-medium text-white">{formatHeight(filters.minHeight)}</span>
           </div>
           <input 
@@ -198,11 +259,16 @@ export function FilterSection({ filters, onChange }: Props) {
         {/* Income */}
         <div className="space-y-4">
           <div className="flex justify-between items-end">
-            <label className="text-[10px] uppercase tracking-widest text-white/40 font-mono">Min Income</label>
+            <div className="space-y-1">
+              <label className="text-[10px] uppercase tracking-widest text-white/40 font-mono">Min Income</label>
+              <p className="text-[10px] text-white/20 leading-tight max-w-[200px]">
+                Income is log-normally distributed.
+              </p>
+            </div>
             <span className="text-xl font-medium text-white">{formatIncome(filters.minIncome)}</span>
           </div>
           <input 
-            type="range" min="0" max="1000000" step="5000"
+            type="range" min="0" max={city.incomeMax} step="5000"
             value={filters.minIncome}
             onChange={(e) => update('minIncome', parseInt(e.target.value))}
             className="w-full h-1.5 bg-zinc-800 rounded-lg appearance-none cursor-pointer accent-blue-500"
@@ -211,7 +277,12 @@ export function FilterSection({ filters, onChange }: Props) {
 
         {/* Race Multi-select */}
         <div className="space-y-2">
-          <label className="text-[10px] uppercase tracking-widest text-white/40 font-mono">Race / Ethnicity</label>
+          <div className="space-y-1">
+            <label className="text-[10px] uppercase tracking-widest text-white/40 font-mono">Race / Ethnicity</label>
+            <p className="text-[10px] text-white/20 leading-tight">
+              Selecting a single ethnicity significantly reduces the pool size.
+            </p>
+          </div>
           <div className="flex flex-wrap gap-2">
             {(['white', 'black', 'hispanic', 'asian', 'other'] as Race[]).map(race => (
               <button
@@ -236,6 +307,9 @@ export function FilterSection({ filters, onChange }: Props) {
 
         {/* Toggles */}
         <div className="space-y-3 pt-4 border-t border-white/5">
+          <p className="text-[10px] text-white/20 leading-tight mb-4">
+            Each choice reduces the pool, but selecting multiple applies a clustering bonus to account for correlation.
+          </p>
           {[
             { id: 'excludeObese', label: 'Healthy Weight' },
             { id: 'nonSmoker', label: 'Non-Smoker' },

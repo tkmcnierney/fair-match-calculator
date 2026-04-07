@@ -37,7 +37,7 @@ export function Header({ baselineRange }: Props) {
               className="absolute top-full left-1/2 -translate-x-1/2 mt-2 w-64 p-4 bg-zinc-900 border border-white/10 rounded-xl shadow-2xl z-50 text-xs leading-relaxed text-white/80"
             >
               <p className="font-bold text-white mb-1">Why this is fair:</p>
-              We define your "fair baseline" as the population of your desired gender within a healthy age range for your age, <span className="text-blue-400">excluding those already in relationships</span>. 
+              We define your "fair baseline" as the local population of your desired gender within a healthy age range for your age, <span className="text-blue-400">excluding those already in relationships</span>. 
               <p className="mt-2 text-blue-400 font-medium">Your current baseline: {baselineRange.min} - {baselineRange.max} years old.</p>
               <p className="mt-2">Widening this range increases your pool, while narrowing it acts as a filter on your baseline.</p>
             </motion.div>
