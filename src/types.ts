@@ -1,6 +1,7 @@
 export type CityId = 'nyc' | 'la' | 'chicago' | 'houston' | 'sd' | 'austin' | 'sf' | 'seattle' | 'denver' | 'dc' | 'boston' | 'atlanta' | 'london' | 'toronto' | 'sydney' | 'vancouver';
 export type Gender = 'male' | 'female';
 export type Race = 'white' | 'black' | 'hispanic' | 'asian' | 'other';
+export type Sexuality = 'straight' | 'bisexual' | 'gay';
 
 export interface CityData {
   name: string;
@@ -8,6 +9,7 @@ export interface CityData {
   obesityRate: number;
   smokingRate: number;
   childrenRate: number; // % of population that wants children
+  lgbtqRate: number; // % of population identifying as LGBTQ+
   heightOffset: number; // inches relative to global baseline
   incomeMax: number; // Max value for the income slider in local currency
   singleRateMultiplier: number; // Adjusts the global single rate for city culture
@@ -16,6 +18,7 @@ export interface CityData {
     code: string;
   };
   raceDist: Record<Race, number>;
+  femaleRatio: number; // % of population that is female (e.g., 0.52)
   income: {
     p10: number;
     p50: number;
@@ -41,6 +44,7 @@ export interface UserFilters {
   minHeight: number; // in inches
   minIncome: number;
   selectedRaces: Race[];
+  selectedSexualities: Sexuality[];
   excludeObese: boolean;
   nonSmoker: boolean;
   wantsChildren: boolean;

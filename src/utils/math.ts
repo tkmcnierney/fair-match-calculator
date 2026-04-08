@@ -1,5 +1,5 @@
 import { HEIGHT_DIST, CITIES, LIFESTYLE_RATES } from '../constants';
-import { Gender, CityId, Race } from '../types';
+import { Gender, CityId, Race, Sexuality } from '../types';
 
 /**
  * Standard Normal CDF approximation
@@ -93,6 +93,26 @@ export function getRaceProbability(cityId: CityId, selectedRaces: Race[], userRa
   return Math.min(1.0, totalProb);
 }
 
+export function getSexualityProbability(cityId: CityId, gender: Gender, selectedSexualities: Sexuality[]): number {
+  if (selectedSexualities.length === 0) return 1;
+  const city = CITIES[cityId];
+  const lgbtqRate = city.lgbtqRate;
+  const straightRate = 1 - lgbtqRate;
+
+  // Distribution within LGBTQ+ pool (estimated)
+  // Bisexual: 57%
+  // Gay/Lesbian: 32% (18% Gay men, 14% Lesbian women)
+  const bisexualRate = lgbtqRate * 0.57;
+  const gayRate = gender === 'male' ? lgbtqRate * 0.18 : lgbtqRate * 0.14;
+
+  let totalProb = 0;
+  if (selectedSexualities.includes('straight')) totalProb += straightRate;
+  if (selectedSexualities.includes('bisexual')) totalProb += bisexualRate;
+  if (selectedSexualities.includes('gay')) totalProb += gayRate;
+
+  return Math.min(1.0, totalProb);
+}
+
 export function getLifestyleProbability(cityId: CityId, gender: Gender, toggles: { excludeObese: boolean; nonSmoker: boolean; wantsChildren: boolean }): number {
   let p = 1;
   const city = CITIES[cityId];
@@ -168,6 +188,7 @@ export function calculateMatches(filters: {
   minHeight: number;
   minIncome: number;
   selectedRaces: Race[];
+  selectedSexualities: Sexuality[];
   excludeObese: boolean;
   nonSmoker: boolean;
   wantsChildren: boolean;
@@ -175,31 +196,37 @@ export function calculateMatches(filters: {
 }) {
   const city = CITIES[filters.city];
   const totalAdults = city.adultPopulation;
-  const genderPool = totalAdults / 2;
+  const genderPool = filters.gender === 'female' 
+    ? totalAdults * city.femaleRatio 
+    : totalAdults * (1 - city.femaleRatio);
   
-  const baseline = getHealthyAgeRange(filters.userAge);
-  const baselineDensity = getAgeDensity(baseline.min, baseline.max);
-  const baselineAvgAge = (baseline.min + baseline.max) / 2;
+  const baselineRange = getHealthyAgeRange(filters.userAge);
+  const baselineDensity = getAgeDensity(baselineRange.min, baselineRange.max);
+  const baselineAvgAge = (baselineRange.min + baselineRange.max) / 2;
   const baselineSingleRate = getSingleRate(baselineAvgAge) * city.singleRateMultiplier;
-  const baselineDenominator = genderPool * baselineDensity * baselineSingleRate;
+  
+  const pSexuality = getSexualityProbability(filters.city, filters.gender, filters.selectedSexualities);
+  const baselineDenominator = genderPool * baselineDensity * baselineSingleRate * pSexuality;
+  const baselinePool = genderPool * baselineDensity * baselineSingleRate;
   
   const selectedDensity = getAgeDensity(filters.minAge, filters.maxAge);
   const avgAge = (filters.minAge + filters.maxAge) / 2;
   const selectedSingleRate = getSingleRate(avgAge) * city.singleRateMultiplier;
+  const selectedPool = genderPool * selectedDensity * selectedSingleRate;
   
   const selectedRange = filters.maxAge - filters.minAge;
-  const baselineRange = baseline.max - baseline.min;
+  const baselineRangeSize = baselineRange.max - baselineRange.min;
   
   // Denominator logic for the actual matches
   let actualDenominator: number;
   let ageFilterProbability: number;
   
-  if (selectedRange > baselineRange) {
-    actualDenominator = genderPool * selectedDensity * selectedSingleRate;
+  if (selectedRange > baselineRangeSize) {
+    actualDenominator = selectedPool;
     ageFilterProbability = 1;
   } else {
-    actualDenominator = baselineDenominator;
-    ageFilterProbability = (selectedDensity * selectedSingleRate) / (baselineDensity * baselineSingleRate);
+    actualDenominator = baselinePool;
+    ageFilterProbability = selectedPool / baselinePool;
   }
   
   let pHeight = getHeightProbability(filters.city, filters.gender, filters.minHeight);
@@ -243,7 +270,7 @@ export function calculateMatches(filters: {
   }
   
   // The "Match Rate" is the product of these locally-nudged probabilities
-  let matchRate = pHeight * pIncome * pRace * pLifestyle;
+  let matchRate = pHeight * pIncome * pRace * pLifestyle * pSexuality * ageFilterProbability;
 
   // 1. Correlation Factor (Clustering Correction)
   // A global multiplier to account for the fact that desirable traits are not independent.
@@ -276,11 +303,10 @@ export function calculateMatches(filters: {
 
   // Remaining matches is the actual pool size multiplied by the match rate
   // If age range is narrower than baseline, we still use the actual density/single rate
-  const selectedPool = genderPool * selectedDensity * selectedSingleRate;
   const remainingMatches = Math.max(0, Math.round(selectedPool * matchRate));
   
   // Fairness Probability is relative to the baseline pool
-  const fairnessProbability = Math.min(1.0, remainingMatches / baselineDenominator);
+  const fairnessProbability = Math.min(1.0, baselineDenominator > 0 ? remainingMatches / baselineDenominator : 0);
   
   // Bottleneck detection
   const probabilities = [
@@ -288,6 +314,7 @@ export function calculateMatches(filters: {
     { name: 'Height', value: pHeight },
     { name: 'Income', value: pIncome },
     { name: 'Race/Ethnicity', value: pRace },
+    { name: 'Sexuality', value: pSexuality },
     { name: 'Lifestyle/Health', value: pLifestyle },
   ];
   
@@ -299,9 +326,9 @@ export function calculateMatches(filters: {
 
   return {
     remainingMatches,
-    denominatorPool: selectedPool,
+    denominatorPool: actualDenominator,
     baselineDenominator,
-    baselineRange: baseline,
+    baselineRange: baselineRange,
     totalProbability: fairnessProbability,
     matchRate,
     bottleneck: matchRate < 0.05 ? bottleneck.name : null,

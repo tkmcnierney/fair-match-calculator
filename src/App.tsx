@@ -24,6 +24,7 @@ const INITIAL_FILTERS: UserFilters = {
   minHeight: 60, // 5'0"
   minIncome: 50000,
   selectedRaces: [],
+  selectedSexualities: ['straight'],
   excludeObese: false,
   nonSmoker: false,
   wantsChildren: false,
@@ -65,6 +66,7 @@ export default function App() {
               actualDenominator={results.denominatorPool}
               baselineDenominator={results.baselineDenominator}
               bottleneck={results.bottleneck}
+              gender={filters.gender}
             />
           </div>
         </div>

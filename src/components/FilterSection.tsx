@@ -1,5 +1,6 @@
-import { CityId, Gender, Race, UserFilters } from '../types';
+import { CityId, Gender, Race, Sexuality, UserFilters } from '../types';
 import { CITIES } from '../constants';
+import { getHealthyAgeRange } from '../utils/math';
 
 import { Info } from 'lucide-react';
 import { useState } from 'react';
@@ -47,7 +48,7 @@ export function FilterSection({ filters, onChange }: Props) {
           </p>
         </div>
         
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div className="space-y-2">
             <label className="text-[10px] uppercase tracking-widest text-white/40 font-mono">City</label>
             <select 
@@ -117,7 +118,16 @@ export function FilterSection({ filters, onChange }: Props) {
           <input 
             type="range" min="18" max="80" step="1"
             value={filters.userAge}
-            onChange={(e) => update('userAge', parseInt(e.target.value))}
+            onChange={(e) => {
+              const newAge = parseInt(e.target.value);
+              const newRange = getHealthyAgeRange(newAge);
+              onChange({
+                ...filters,
+                userAge: newAge,
+                minAge: newRange.min,
+                maxAge: newRange.max
+              });
+            }}
             className="w-full h-1.5 bg-zinc-800 rounded-lg appearance-none cursor-pointer accent-blue-500"
           />
         </div>
@@ -215,8 +225,8 @@ export function FilterSection({ filters, onChange }: Props) {
           <div className="flex justify-between items-end">
             <div className="space-y-1">
               <label className="text-[10px] uppercase tracking-widest text-white/40 font-mono">Age Range</label>
-              <p className="text-[10px] text-white/20 leading-tight max-w-[200px]">
-                Narrower ranges reduce the pool size.
+              <p className="text-[10px] text-white/20 leading-tight max-w-[240px]">
+                Narrower ranges reduce pool size. Note: Older ranges often yield higher match rates as criteria like income mature with age.
               </p>
             </div>
             <span className="text-xl font-medium text-white">{filters.minAge} - {filters.maxAge}</span>
@@ -300,6 +310,37 @@ export function FilterSection({ filters, onChange }: Props) {
                 }`}
               >
                 {race.charAt(0).toUpperCase() + race.slice(1)}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Sexuality Multi-select */}
+        <div className="space-y-2">
+          <div className="space-y-1">
+            <label className="text-[10px] uppercase tracking-widest text-white/40 font-mono">Preferred Sexuality</label>
+            <p className="text-[10px] text-white/20 leading-tight">
+              Select all that apply.
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {(['straight', 'bisexual', 'gay'] as Sexuality[]).map(sex => (
+              <button
+                key={sex}
+                onClick={() => {
+                  const next = filters.selectedSexualities.includes(sex)
+                    ? filters.selectedSexualities.filter(s => s !== sex)
+                    : [...filters.selectedSexualities, sex];
+                  // Don't allow empty selection
+                  if (next.length > 0) update('selectedSexualities', next);
+                }}
+                className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
+                  filters.selectedSexualities.includes(sex)
+                    ? 'bg-blue-500 text-white'
+                    : 'bg-zinc-800 text-white/40 hover:bg-zinc-700'
+                }`}
+              >
+                {sex.charAt(0).toUpperCase() + sex.slice(1)}
               </button>
             ))}
           </div>
