@@ -85,7 +85,7 @@ export function SummarySection({ probability, remainingMatches, actualDenominato
       <div className="p-8 bg-zinc-900/50 border border-white/5 rounded-3xl">
         <h3 className="text-lg font-semibold text-white mb-4">The Reality Check</h3>
         <p className="text-white/60 leading-relaxed text-sm">
-          In your chosen city, your search criteria covers <span className="text-white font-medium">{Math.round(actualDenominator).toLocaleString()}</span> single people of your desired gender. 
+          In your chosen city, your pool consists of <span className="text-white font-medium">{Math.round(actualDenominator).toLocaleString()}</span> single people of your desired gender in a healthy age range based on your age. 
           Based on your preferences, only <span className="text-white font-medium">{remainingMatches.toLocaleString()}</span> of 
           them meet all your criteria.
         </p>
